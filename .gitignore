@@ -36,3 +36,6 @@ venv.bak/
 .env
 .env.*
 !.env.example
+
+#the database file
+shareguard.db
