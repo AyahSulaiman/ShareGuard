@@ -1,3 +1,7 @@
+from datetime import datetime, timedelta, timezone
+from os import getenv
+from dotenv import load_dotenv
+import jwt
 from pwdlib import PasswordHash
 from sqlmodel import Session, select
 from models import User
@@ -6,6 +10,11 @@ from models import User
 
 password_hash = PasswordHash.recommended()
 DUMMY_HASH = password_hash.hash("dummypassword")
+ALGORITHM = "HS256"
+load_dotenv()
+SECRET_KEY = getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY variable is not set")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
@@ -26,3 +35,14 @@ def authenticate_user(session: Session, email: str, password: str) -> User | Non
     if not verify_password(password, user.password_hash):
         return None
     return user
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
