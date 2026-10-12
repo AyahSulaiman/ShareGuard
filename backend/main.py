@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi.security import OAuth2PasswordRequestForm
 from database import SessionDep, create_db_and_tables
 from models import Token, User, UserCreate,UserPublic
-from security import create_access_token, get_user, authenticate_user, get_password_hash
+from security import create_access_token, get_user, authenticate_user, get_password_hash, CurrentUserDep
 
 
 
@@ -48,3 +48,8 @@ def login_for_access_token(session: SessionDep,
     access_token = create_access_token(
         data={"sub": str(user.id)})
     return Token(access_token=access_token, token_type="bearer")
+
+
+@app.get("/users/me/", response_model=UserPublic)
+def read_current_user(current_user: CurrentUserDep) -> User:
+    return current_user
