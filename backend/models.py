@@ -27,3 +27,18 @@ class Token(SQLModel):
     access_token: str
     token_type: str
 
+class File(SQLModel, table=True):
+    id: int | None = Field(primary_key=True, default=None)
+    original_name: str
+    stored_name: str = Field(unique=True)
+    content_type: str
+    size_bytes: int
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    owner_id: int = Field(foreign_key="user.id")
+
+class FilePublic(SQLModel):
+    id : int
+    original_name : str
+    content_type : str
+    size_bytes: int
+    uploaded_at: datetime

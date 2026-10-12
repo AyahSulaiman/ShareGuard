@@ -39,3 +39,6 @@ venv.bak/
 
 #the database file
 shareguard.db
+
+#uploaded files
+uploads
