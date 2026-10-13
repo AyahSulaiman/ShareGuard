@@ -1,10 +1,11 @@
+from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from contextlib import asynccontextmanager
 from fastapi.security import OAuth2PasswordRequestForm
 from database import SessionDep, create_db_and_tables
-from models import FilePublic, Token, User, UserCreate,UserPublic,File
+from models import FilePublic, LinkRecipient, ShareLink, ShareLinkCreate, ShareLinkPublic, Token, User, UserCreate,UserPublic,File
 from security import create_access_token, get_user, authenticate_user, get_password_hash, CurrentUserDep
 from pathlib import Path
 from sqlmodel import select
@@ -97,3 +98,23 @@ def get_user_files(current_user: CurrentUserDep, session: SessionDep):
     file_list = session.exec(statement).all()
     return file_list
 
+@app.post("/files/{file_id}/links/",response_model=ShareLinkPublic, status_code=status.HTTP_201_CREATED)
+def create_share_link(file_id: int, link_in: ShareLinkCreate, current_user: CurrentUserDep, session: SessionDep):
+    file = session.get(File, file_id)
+    if file is None or file.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="file does not exist")
+    generated_token = secrets.token_urlsafe(32)
+    expire =  datetime.now(timezone.utc) + timedelta(hours=link_in.expires_in_hours)
+    db_sharelink = ShareLink(file_id=file.id, token=generated_token, expires_at=expire, max_downloads=link_in.max_downloads)
+    session.add(db_sharelink)
+    session.flush()
+    session.refresh(db_sharelink)
+    unique_emails = set()
+    for email in link_in.recipients:
+        unique_emails.add(email.lower())
+    for user_email in unique_emails:
+        recipient = LinkRecipient(link_id=db_sharelink.id, email=user_email)
+        session.add(recipient)
+    session.commit()
+    session.refresh(db_sharelink)
+    return db_sharelink
