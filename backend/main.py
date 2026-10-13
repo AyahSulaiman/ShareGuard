@@ -7,6 +7,7 @@ from database import SessionDep, create_db_and_tables
 from models import FilePublic, Token, User, UserCreate,UserPublic,File
 from security import create_access_token, get_user, authenticate_user, get_password_hash, CurrentUserDep
 from pathlib import Path
+from sqlmodel import select
 
 
 UPLOADS_DIR = Path("uploads")
@@ -89,4 +90,10 @@ def create_file(file: UploadFile, current_user: CurrentUserDep, session: Session
     session.commit()
     session.refresh(db_file)
     return db_file
+
+@app.get("/files/", response_model=list[FilePublic])
+def get_user_files(current_user: CurrentUserDep, session: SessionDep):
+    statement = select(File).where(File.owner_id == current_user.id)
+    file_list = session.exec(statement).all()
+    return file_list
 
