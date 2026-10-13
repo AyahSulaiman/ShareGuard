@@ -118,3 +118,18 @@ def create_share_link(file_id: int, link_in: ShareLinkCreate, current_user: Curr
     session.commit()
     session.refresh(db_sharelink)
     return db_sharelink
+
+@app.post("/links/{link_id}/revoke/", response_model=ShareLinkPublic)
+def revoke_link(link_id: int, current_user: CurrentUserDep, session: SessionDep):
+    link = session.get(ShareLink, link_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found")
+    file = session.get(File, link.file_id)
+    if file is None or file.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Link not found")
+    link.revoked = True
+    session.add(link)
+    session.commit()
+    session.refresh(link)
+    return link
+
