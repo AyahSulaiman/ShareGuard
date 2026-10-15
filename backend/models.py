@@ -1,6 +1,7 @@
 from pydantic import EmailStr
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
+from enum import Enum
 
 class UserBase(SQLModel):
     email: EmailStr
@@ -75,3 +76,31 @@ class LinkRecipient(SQLModel, table=True):
     id: int | None = Field(primary_key=True,default=None)
     link_id: int = Field(foreign_key="sharelink.id")
     email: EmailStr
+
+
+class AccessResult(str, Enum):
+    SUCCESS = "success"
+    NOT_RECIPIENT = "not_recipient"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+    LIMIT_REACHED = "limit_reached"
+
+
+class AccessLog(SQLModel, table=True):
+    id: int | None = Field(primary_key=True,default=None)
+    link_id: int = Field(foreign_key="sharelink.id")
+    user_id: int | None = Field(foreign_key="user.id", default=None)
+    result: AccessResult
+    ip_address: str | None = Field(default=None)
+    user_agent: str | None = Field(default=None)
+    attempted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))    
+
+
+class AccessLogPublic(SQLModel):
+    id: int
+    link_id: int
+    user_id: int | None
+    result: AccessResult
+    ip_address: str | None
+    user_agent: str | None
+    attempted_at: datetime
