@@ -1,14 +1,16 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Annotated
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, status, Request
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from fastapi.security import OAuth2PasswordRequestForm
 from database import SessionDep, create_db_and_tables
-from models import FilePublic, LinkRecipient, ShareLink, ShareLinkCreate, ShareLinkPublic, Token, User, UserCreate,UserPublic,File
+from models import FilePublic, LinkRecipient, ShareLink, ShareLinkCreate, ShareLinkPublic, Token, User, UserCreate,UserPublic,File,AccessResult
 from security import create_access_token, get_user, authenticate_user, get_password_hash, CurrentUserDep
 from pathlib import Path
 from sqlmodel import select
+from audit import log_access
 
 
 UPLOADS_DIR = Path("uploads")
@@ -133,3 +135,30 @@ def revoke_link(link_id: int, current_user: CurrentUserDep, session: SessionDep)
     session.refresh(link)
     return link
 
+
+@app.get("/links/{token}/download/")
+def download_file(token: str, current_user: CurrentUserDep, session: SessionDep, request: Request):
+    link = session.exec(select(ShareLink).where(ShareLink.token == token)).first()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found")
+    recipient = session.exec(select(LinkRecipient).where(LinkRecipient.link_id == link.id, LinkRecipient.email == current_user.email)).first()
+    if recipient is None:
+        log_access(session=session, link=link, user=current_user, request=request, result=AccessResult.NOT_RECIPIENT)
+        raise HTTPException(status_code=403, detail="You Do Not Have Access To This Link")
+    if link.revoked:
+        log_access(session=session, link=link, user=current_user, request=request, result=AccessResult.REVOKED)
+        raise HTTPException(status_code=410, detail="Link revoked")
+    expiry = link.expires_at.replace(tzinfo=timezone.utc)
+    if expiry <= datetime.now(timezone.utc):
+        log_access(session=session, link=link, user=current_user, request=request, result=AccessResult.EXPIRED)
+        raise HTTPException(status_code=410, detail="Link expired")
+    if link.max_downloads <= link.download_count:
+        log_access(session=session, link=link, user=current_user, request=request, result=AccessResult.LIMIT_REACHED)
+        raise HTTPException(status_code=410, detail="Download limit reached")
+
+    file = session.get(File, link.file_id)
+    file_path = UPLOADS_DIR / file.stored_name
+    link.download_count += 1
+    log_access(session=session, link=link, user=current_user, request=request, result=AccessResult.SUCCESS)
+
+    return FileResponse(path=file_path, media_type=file.content_type, filename=file.original_name)
